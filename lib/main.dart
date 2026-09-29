@@ -1,121 +1,183 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import 'screens/product_list_screen.dart';
+import 'screens/product_detail_screen.dart';
+import 'screens/cart_screen.dart';
+import 'screens/favorites_screen.dart';
+import 'screens/profile_screen.dart';
+import 'providers/derived_providers.dart';
+
+// ═══════════════════════════════════════════════════════════
+//  Entry point — wrapped with ProviderScope
+// ═══════════════════════════════════════════════════════════
 void main() {
-  runApp(const MyApp());
+  runApp(const ProviderScope(child: EcommerceApp()));
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+// ═══════════════════════════════════════════════════════════
+//  Root widget — Material 3 theme + GoRouter
+// ═══════════════════════════════════════════════════════════
+class EcommerceApp extends StatelessWidget {
+  const EcommerceApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
+    return MaterialApp.router(
+      title: 'ShopEase',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF006D77), // teal brand colour
+          brightness: Brightness.light,
+        ),
+        appBarTheme: const AppBarTheme(
+          centerTitle: true,
+          elevation: 2,
+        ),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      routerConfig: _router,
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+// ═══════════════════════════════════════════════════════════
+//  GoRouter configuration
+// ═══════════════════════════════════════════════════════════
+final _rootNavigatorKey = GlobalKey<NavigatorState>();
+final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
+final GoRouter _router = GoRouter(
+  navigatorKey: _rootNavigatorKey,
+  initialLocation: '/',
+  routes: [
+    // ShellRoute wraps the 4 tabs with a persistent bottom nav bar
+    ShellRoute(
+      navigatorKey: _shellNavigatorKey,
+      builder: (context, state, child) => _AppShell(child: child),
+      routes: [
+        GoRoute(
+          path: '/',
+          pageBuilder: (_, __) => const NoTransitionPage(
+            child: ProductListScreen(),
+          ),
+        ),
+        GoRoute(
+          path: '/cart',
+          pageBuilder: (_, __) => const NoTransitionPage(
+            child: CartScreen(),
+          ),
+        ),
+        GoRoute(
+          path: '/favorites',
+          pageBuilder: (_, __) => const NoTransitionPage(
+            child: FavoritesScreen(),
+          ),
+        ),
+        GoRoute(
+          path: '/profile',
+          pageBuilder: (_, __) => const NoTransitionPage(
+            child: ProfileScreen(),
+          ),
+        ),
+      ],
+    ),
+    // Product detail — full‑screen, outside the shell
+    GoRoute(
+      parentNavigatorKey: _rootNavigatorKey,
+      path: '/product/:id',
+      builder: (_, state) => ProductDetailScreen(
+        productId: state.pathParameters['id']!,
+      ),
+    ),
+  ],
+);
 
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
+// ═══════════════════════════════════════════════════════════
+//  App shell (Scaffold + BottomNavigationBar + cart badge)
+// ═══════════════════════════════════════════════════════════
+class _AppShell extends ConsumerWidget {
+  final Widget child;
+  const _AppShell({required this.child});
 
-  final String title;
+  static const _tabs = ['/', '/cart', '/favorites', '/profile'];
 
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  int _currentIndex(BuildContext context) {
+    final location = GoRouterState.of(context).uri.toString();
+    for (int i = _tabs.length - 1; i >= 0; i--) {
+      if (location.startsWith(_tabs[i]) && _tabs[i] != '/' || _tabs[i] == '/' && location == '/') {
+        return i;
+      }
+    }
+    return 0;
   }
 
   @override
-  Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cartCount = ref.watch(cartItemCountProvider);
+    final currentIdx = _currentIndex(context);
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
+        title: Text(
+          'ShopEase',
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
+          ),
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: IconButton(
+              tooltip: 'Panier',
+              icon: Badge(
+                isLabelVisible: cartCount > 0,
+                label: Text('$cartCount'),
+                child: const Icon(Icons.shopping_cart),
+              ),
+              onPressed: () => context.go('/cart'),
+            ),
+          ),
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+      body: child,
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: currentIdx,
+        onDestinationSelected: (i) => context.go(_tabs[i]),
+        destinations: [
+          const NavigationDestination(
+            icon: Icon(Icons.storefront_outlined),
+            selectedIcon: Icon(Icons.storefront),
+            label: 'Catalogue',
+          ),
+          NavigationDestination(
+            icon: Badge(
+              isLabelVisible: cartCount > 0,
+              label: Text('$cartCount'),
+              child: const Icon(Icons.shopping_cart_outlined),
+            ),
+            selectedIcon: Badge(
+              isLabelVisible: cartCount > 0,
+              label: Text('$cartCount'),
+              child: const Icon(Icons.shopping_cart),
+            ),
+            label: 'Panier',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.favorite_outline),
+            selectedIcon: Icon(Icons.favorite),
+            label: 'Favoris',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: 'Profil',
+          ),
+        ],
       ),
     );
   }
