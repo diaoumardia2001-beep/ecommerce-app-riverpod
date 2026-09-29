@@ -6,12 +6,44 @@ import '../providers/products_provider.dart';
 import '../providers/cart_provider.dart';
 import '../providers/favorites_provider.dart';
 
-class ProductDetailScreen extends ConsumerWidget {
+class ProductDetailScreen extends ConsumerStatefulWidget {
   final String productId;
   const ProductDetailScreen({super.key, required this.productId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProductDetailScreen> createState() =>
+      _ProductDetailScreenState();
+}
+
+class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _cartAnimController;
+  late final Animation<double> _cartScaleAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _cartAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+    _cartScaleAnim = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.1), weight: 50),
+      TweenSequenceItem(tween: Tween(begin: 1.1, end: 1.0), weight: 50),
+    ]).animate(CurvedAnimation(
+      parent: _cartAnimController,
+      curve: Curves.easeInOut,
+    ));
+  }
+
+  @override
+  void dispose() {
+    _cartAnimController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final asyncProducts = ref.watch(productsProvider);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -20,7 +52,7 @@ class ProductDetailScreen extends ConsumerWidget {
       body: asyncProducts.when(
         data: (products) {
           final product =
-              products.firstWhere((p) => p.id == productId);
+              products.firstWhere((p) => p.id == widget.productId);
           final isFav = ref.watch(favoritesProvider).contains(product.id);
           final isInCart = ref
               .watch(cartProvider)
@@ -41,9 +73,15 @@ class ProductDetailScreen extends ConsumerWidget {
                     tooltip: isFav
                         ? 'Retirer des favoris'
                         : 'Ajouter aux favoris',
-                    icon: Icon(
-                      isFav ? Icons.favorite : Icons.favorite_border,
-                      color: isFav ? Colors.redAccent : null,
+                    icon: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 250),
+                      transitionBuilder: (child, animation) =>
+                          ScaleTransition(scale: animation, child: child),
+                      child: Icon(
+                        isFav ? Icons.favorite : Icons.favorite_border,
+                        key: ValueKey(isFav),
+                        color: isFav ? Colors.redAccent : null,
+                      ),
                     ),
                     onPressed: () => ref
                         .read(favoritesProvider.notifier)
@@ -134,47 +172,57 @@ class ProductDetailScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 32),
 
-                      // Add‑to‑cart button
-                      SizedBox(
-                        width: double.infinity,
-                        height: 52,
-                        child: FilledButton.icon(
-                          style: FilledButton.styleFrom(
-                            backgroundColor:
-                                isInCart ? Colors.green : colorScheme.primary,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
+                      // Add-to-cart button with scale animation (BONUS)
+                      ScaleTransition(
+                        scale: _cartScaleAnim,
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor:
+                                  isInCart ? Colors.green : colorScheme.primary,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
                             ),
-                          ),
-                          icon: Icon(
-                            isInCart
-                                ? Icons.check
-                                : Icons.add_shopping_cart,
-                          ),
-                          label: Text(
-                            isInCart
-                                ? 'Déjà dans le panier'
-                                : 'Ajouter au panier',
-                            style: const TextStyle(fontSize: 16),
-                          ),
-                          onPressed: () {
-                            ref
-                                .read(cartProvider.notifier)
-                                .add(product);
-                            ScaffoldMessenger.of(context)
-                              ..hideCurrentSnackBar()
-                              ..showSnackBar(
-                                SnackBar(
-                                  behavior: SnackBarBehavior.floating,
-                                  content: Text(
-                                      '${product.name} ajouté au panier'),
-                                  action: SnackBarAction(
-                                    label: 'Voir le panier',
-                                    onPressed: () => context.go('/cart'),
+                            icon: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 250),
+                              transitionBuilder: (child, animation) =>
+                                  ScaleTransition(scale: animation, child: child),
+                              child: Icon(
+                                isInCart ? Icons.check : Icons.add_shopping_cart,
+                                key: ValueKey(isInCart),
+                              ),
+                            ),
+                            label: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 250),
+                              child: Text(
+                                isInCart
+                                    ? 'Déjà dans le panier'
+                                    : 'Ajouter au panier',
+                                key: ValueKey(isInCart),
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                            ),
+                            onPressed: () {
+                              ref.read(cartProvider.notifier).add(product);
+                              _cartAnimController.forward(from: 0);
+                              ScaffoldMessenger.of(context)
+                                ..hideCurrentSnackBar()
+                                ..showSnackBar(
+                                  SnackBar(
+                                    behavior: SnackBarBehavior.floating,
+                                    content: Text(
+                                        '${product.name} ajouté au panier'),
+                                    action: SnackBarAction(
+                                      label: 'Voir le panier',
+                                      onPressed: () => context.go('/cart'),
+                                    ),
                                   ),
-                                ),
-                              );
-                          },
+                                );
+                            },
+                          ),
                         ),
                       ),
                     ],

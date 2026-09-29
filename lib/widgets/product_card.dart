@@ -8,12 +8,63 @@ import '../providers/favorites_provider.dart';
 
 /// A card displaying a product thumbnail in the catalogue grid.
 /// Handles its own styling for consistency across the app.
-class ProductCard extends ConsumerWidget {
+/// Uses ConsumerStatefulWidget for the add-to-cart scale animation (bonus).
+class ProductCard extends ConsumerStatefulWidget {
   final Product product;
   const ProductCard({super.key, required this.product});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProductCard> createState() => _ProductCardState();
+}
+
+class _ProductCardState extends ConsumerState<ProductCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _animController;
+  late final Animation<double> _scaleAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _scaleAnim = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.25), weight: 50),
+      TweenSequenceItem(tween: Tween(begin: 1.25, end: 1.0), weight: 50),
+    ]).animate(CurvedAnimation(
+      parent: _animController,
+      curve: Curves.easeInOut,
+    ));
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
+  }
+
+  void _addToCart() {
+    final product = widget.product;
+    ref.read(cartProvider.notifier).add(product);
+    _animController.forward(from: 0);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text('${product.name} ajouté au panier'),
+          action: SnackBarAction(
+            label: 'Voir le panier',
+            onPressed: () => context.go('/cart'),
+          ),
+        ),
+      );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final product = widget.product;
     final isFav = ref.watch(favoritesProvider).contains(product.id);
     final isInCart =
         ref.watch(cartProvider).any((ci) => ci.product.id == product.id);
@@ -63,7 +114,7 @@ class ProductCard extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  // Favourite button (top‑right)
+                  // Favourite button (top-right) with scale animation
                   Positioned(
                     top: 6,
                     right: 6,
@@ -76,16 +127,22 @@ class ProductCard extends ConsumerWidget {
                             ref.read(favoritesProvider.notifier).toggle(product.id),
                         child: Padding(
                           padding: const EdgeInsets.all(6),
-                          child: Icon(
-                            isFav ? Icons.favorite : Icons.favorite_border,
-                            color: isFav ? Colors.redAccent : Colors.grey,
-                            size: 20,
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 250),
+                            transitionBuilder: (child, animation) =>
+                                ScaleTransition(scale: animation, child: child),
+                            child: Icon(
+                              isFav ? Icons.favorite : Icons.favorite_border,
+                              key: ValueKey(isFav),
+                              color: isFav ? Colors.redAccent : Colors.grey,
+                              size: 20,
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                  // Category chip (top‑left)
+                  // Category chip (top-left)
                   Positioned(
                     top: 6,
                     left: 6,
@@ -135,38 +192,27 @@ class ProductCard extends ConsumerWidget {
                       ),
                     ),
                     const Spacer(),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 32,
-                      child: FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: isInCart
-                              ? Colors.green
-                              : colorScheme.primary,
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          textStyle: const TextStyle(fontSize: 12),
+                    // Animated add-to-cart button (BONUS)
+                    ScaleTransition(
+                      scale: _scaleAnim,
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 32,
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: isInCart
+                                ? Colors.green
+                                : colorScheme.primary,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            textStyle: const TextStyle(fontSize: 12),
+                          ),
+                          icon: Icon(
+                            isInCart ? Icons.check : Icons.add_shopping_cart,
+                            size: 16,
+                          ),
+                          label: Text(isInCart ? 'Ajouté' : 'Ajouter'),
+                          onPressed: _addToCart,
                         ),
-                        icon: Icon(
-                          isInCart ? Icons.check : Icons.add_shopping_cart,
-                          size: 16,
-                        ),
-                        label: Text(isInCart ? 'Ajouté' : 'Ajouter'),
-                        onPressed: () {
-                          ref.read(cartProvider.notifier).add(product);
-                          ScaffoldMessenger.of(context)
-                            ..hideCurrentSnackBar()
-                            ..showSnackBar(
-                              SnackBar(
-                                behavior: SnackBarBehavior.floating,
-                                content: Text(
-                                    '${product.name} ajouté au panier'),
-                                action: SnackBarAction(
-                                  label: 'Voir le panier',
-                                  onPressed: () => context.go('/cart'),
-                                ),
-                              ),
-                            );
-                        },
                       ),
                     ),
                   ],
